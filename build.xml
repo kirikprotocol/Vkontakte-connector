@@ -6,9 +6,7 @@
 	<property name="distr-dir" location="${build-dir}/distr"/>
 
 	<property name="src-dir" location="${basedir}/src"/>
-	<property name="test-dir" location="${basedir}/test"/>
 	<property name="xsl-dir" location="${basedir}/xslt"/>
-	<property name="test-src" location="${test-dir}"/>
 	<property name="report-dir" location="${build-dir}/report"/>
 
 	<condition property="resolver" value="eyeline" else="snapshot">
@@ -37,11 +35,6 @@
 		<fileset dir="${build-dir}/lib">
 			<include name="**/*.jar"/>
 		</fileset>
-	</path>
-
-	<path id="test-classpath">
-		<pathelement location="${xsl-dir}"/>
-		<pathelement location="${test-src}"/>
 	</path>
 
 	<target name="build" depends="clean, resolve">
@@ -74,60 +67,10 @@
 		</jar>
 	</target>
 
-	<target name="distr" depends="jar,test">
+	<target name="distr" depends="jar">
 		<ivy:publish resolver="${resolver}" pubrevision="${release-version}" overwrite="true">
 			<artifacts pattern=".build/distr/[artifact].[ext]"/>
 		</ivy:publish>
-	</target>
-
-	<target name="compile-test" depends="build">
-		<mkdir dir="${build-dir}/test"/>
-		<javac destdir="${build-dir}/test"
-			   optimize="off"
-			   debug="on"
-			   source="1.7"
-			   target="1.7"
-			   encoding="UTF-8"
-			   nowarn="true"
-			   includeantruntime="false">
-			<compilerarg value="-Xlint:all"/>
-			<src path="${test-src}"/>
-			<classpath refid="classpath"/>
-			<classpath path="${build-dir}/out"/>
-		</javac>
-	</target>
-
-	<target name="test" description="Execute unit tests" depends="compile-test">
-		<mkdir dir="${report-dir}/tmp/test"/>
-		<mkdir dir="${report-dir}/junit"/>
-
-		<junit printsummary="true" failureproperty="junit.failure" fork="true" dir="${basedir}">
-			<classpath>
-				<pathelement location="${build-dir}/test"/>
-				<pathelement location="${build-dir}/out"/>
-			</classpath>
-
-			<classpath refid="classpath"/>
-			<classpath refid="test-classpath"/>
-
-			<batchtest todir="${report-dir}/tmp/test">
-				<fileset dir="${test-src}">
-					<include name="**/*Test.java"/>
-					<!-- a '$' in the filename indicates an inner class -->
-					<exclude name="**/*$*"/>
-				</fileset>
-
-				<formatter type="xml"/>
-			</batchtest>
-		</junit>
-
-		<junitreport todir="${report-dir}/tmp">
-			<fileset dir="${report-dir}/tmp/test"/>
-			<report todir="${report-dir}/junit"/>
-		</junitreport>
-
-		<delete dir="${report-dir}/tmp"/>
-		<fail if="junit.failure" message="Unit test(s) failed. See reports!"/>
 	</target>
 
 </project>
