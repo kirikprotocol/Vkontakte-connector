@@ -254,8 +254,6 @@ public class VkMessageConnector extends HttpServlet {
     protected void fillSADSRequest(SADSRequest sadsRequest, VkCallbackRequest request) {
       super.fillSADSRequest(sadsRequest, request);
       try {
-        Integer userId = request.getCallback().getObject().getUserId();
-        sadsRequest.getAttributes().put("vkontakte.user.id", userId);
         handleFileUpload(sadsRequest, request);
       } catch (Exception e) {
         log.error(e.getMessage(), e);

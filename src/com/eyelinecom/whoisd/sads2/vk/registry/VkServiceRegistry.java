@@ -44,7 +44,7 @@ public class VkServiceRegistry extends ServiceConfigListener {
       final ServiceConfig serviceConfig = (ServiceConfig) config;
       String token = getAccessToken(serviceConfig.getAttributes());
       String group = getVkGroup(serviceConfig.getAttributes());
-      String confirmationCode = null; // TODO:...
+      String confirmationCode = getVkConfirmationCode(serviceConfig.getAttributes());
       token = StringUtils.trimToNull(token);
       group = StringUtils.trimToNull(group);
       confirmationCode = StringUtils.trimToNull(confirmationCode);
@@ -57,9 +57,13 @@ public class VkServiceRegistry extends ServiceConfigListener {
   }
 
   private void register(String serviceId, String token, String groupId, String confirmationCode) {
+    ServiceEntry serviceEntry = serviceMap.get(serviceId);
+    if (serviceEntry != null && groupId.equals(serviceEntry.groupId) && token.equals(serviceEntry.token)) {
+      log.debug("Already registered   service " + serviceId + " already registered in vk api , groupId: " + groupId + ", token: " + token.substring(0, 6) + "...");
+      return;
+    }
     String url = api.connectorUrl() + "/" + serviceId;
-    log.debug("registering serviceId: " + serviceId + ", groupId: " + groupId + ", token: " + token.substring(0, 6) + "..." +
-      ", confirmationCode: " + confirmationCode + " url: " + url);
+    log.debug("registering serviceId: " + serviceId + ", groupId: " + groupId + ", token: " + token.substring(0, 6) + "..." + " url: " + url);
     if (confirmationCode != null) {
       serviceMap.put(serviceId, new ServiceEntry(serviceId, groupId, token, confirmationCode));
     } else {
@@ -67,16 +71,16 @@ public class VkServiceRegistry extends ServiceConfigListener {
       if (!currentUrl.equals(url)) {
         confirmationCode = api.getCallbackConfirmationCode(token, groupId);
         log.debug("got confirmationCode: " + confirmationCode);
+        int fails = 0;
+        while (true) {
+          int code = api.setCallbackServer(token, groupId, url);
+          if (code == 1) break; // "ok" - success!
+          if (code == 2) continue; // "wait" - retrying requests
+          if (code == 3) throw new RuntimeException("Failed to register callback url for service " + serviceId + ", groupId: " + groupId + " (state=\"incorrect\")");
+          if (code == 4) fails++; // for
+          if (fails > 2) throw new RuntimeException("Failed to register callback url for service " + serviceId + ", groupId: " + groupId + " (state=\"failed\")");
+        }
         serviceMap.put(serviceId, new ServiceEntry(serviceId, groupId, token, confirmationCode));
-        int code;
-        do {
-          code = api.setCallbackServer(token, groupId, url);
-          try {
-            Thread.sleep(1000); // TODO: get rid of this shit (or make it look better)
-          } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-          }
-        } while (code == 2);
       } else {
         serviceMap.put(serviceId, new ServiceEntry(serviceId, groupId, token, confirmationCode));
       }
@@ -84,7 +88,9 @@ public class VkServiceRegistry extends ServiceConfigListener {
   }
 
   private void unregister(String serviceId) {
-    // TODO: ?
+    log.debug("unregistering " + serviceId);
+    serviceMap.remove(serviceId);
+    // TODO: url in group setting will remain for old service, should do anything about it?
   }
 
   public String getConfirmationCode(String serviceId) {
@@ -101,14 +107,20 @@ public class VkServiceRegistry extends ServiceConfigListener {
 
   public static String getAccessToken(Properties properties) {
     VkBotSettings botSettings = getVkBotSettings(properties);
-    if(botSettings == null) return null;
+    if (botSettings == null) return null;
     return botSettings.accessToken;
   }
 
   public static String getVkGroup(Properties properties) {
     VkBotSettings botSettings = getVkBotSettings(properties);
-    if(botSettings == null) return null;
+    if (botSettings == null) return null;
     return "" + botSettings.groupId;
+  }
+
+  private static String getVkConfirmationCode(Properties properties) {
+    VkBotSettings botSettings = getVkBotSettings(properties);
+    if (botSettings == null) return null;
+    return botSettings.confirmationCode;
   }
 
   private static VkBotSettings getVkBotSettings(Properties properties) {

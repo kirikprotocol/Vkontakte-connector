@@ -1,6 +1,6 @@
 package com.eyelinecom.whoisd.sads2.vk.resource;
 
-import com.eyelinecom.whoisd.sads2.vk.api.types.VkSendAttachment;
+import com.eyelinecom.whoisd.sads2.vk.api.types.VkMessagesGet;
 
 /**
  * Created with IntelliJ IDEA.
@@ -26,4 +26,6 @@ public interface VkApi {
   String getCallbackServer(String token, String groupId);
 
   String uploadPhoto(String token, byte[] bytes);
+
+  VkMessagesGet getMessages(String accessToken);
 }

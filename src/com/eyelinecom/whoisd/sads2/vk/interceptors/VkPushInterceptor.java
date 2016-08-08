@@ -103,8 +103,7 @@ public class VkPushInterceptor extends BlankInterceptor implements Initable {
 
         if (!isNothingToSend) {
 
-          Integer userId = (Integer) request.getAttributes().get("vkontakte.user.id");
-          if (userId == null) userId = Integer.parseInt(request.getProfile().property("vkontakte", "id").getValue());
+          Integer userId = Integer.parseInt(request.getProfile().property("vkontakte", "id").getValue());
           client.send(text + ((keyboard == null) ? "" : "\n" + keyboard), userId, accessToken);
         }
 

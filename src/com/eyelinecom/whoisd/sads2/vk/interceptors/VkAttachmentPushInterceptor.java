@@ -88,9 +88,7 @@ public class VkAttachmentPushInterceptor extends BlankInterceptor implements Ini
     if (attachments.isEmpty()) return;
 
     String token = VkServiceRegistry.getAccessToken(request.getServiceScenario().getAttributes());
-
-    Integer userId = (Integer) request.getAttributes().get("vkontakte.user.id");
-    if (userId == null) userId = Integer.parseInt(request.getProfile().property("vkontakte", "id").getValue());
+    Integer userId = Integer.parseInt(request.getProfile().property("vkontakte", "id").getValue());
 
     for (Attachment attachment : attachments) {
       Attachment.Type type = fromString(attachment.getType());

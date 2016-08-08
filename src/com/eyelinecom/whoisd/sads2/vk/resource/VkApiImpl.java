@@ -6,6 +6,7 @@ import com.eyelinecom.whoisd.sads2.common.SADSInitUtils;
 import com.eyelinecom.whoisd.sads2.common.UrlUtils;
 import com.eyelinecom.whoisd.sads2.resource.ResourceFactory;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkCallbackServerSettings;
+import com.eyelinecom.whoisd.sads2.vk.api.types.VkMessagesGet;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkSaveMessagesPhoto;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkSaveMessagesPhotoResponse;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkSetCallbackServerResponse;
@@ -24,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -43,19 +45,49 @@ public class VkApiImpl implements VkApi {
 
   private final HttpDataLoader loader;
   private final Properties properties;
+  private final int maxRateLimit;
+  private final int maxRateInterval;
   private final String connectorUrl;
+  private final ArrayBlockingQueue<Long> rateLimitQueue;
 
   public VkApiImpl(HttpDataLoader loader, Properties properties) {
     this.loader = loader;
     this.properties = properties;
+    this.maxRateLimit = Integer.parseInt(properties.getProperty("rate.limit", "3"));
+    this.maxRateInterval = Integer.parseInt(properties.getProperty("rate.interval", "1000"));
     this.connectorUrl = properties.getProperty("connector.url");
+    this.rateLimitQueue = new ArrayBlockingQueue<>(maxRateLimit);
+    for (int i = 0; i < maxRateLimit; i++) rateLimitQueue.add(0L); //this queue will be alwats full
+  }
+
+  private String apiRequest(String url) throws Exception {
+    //queue.
+    checkRateLimit();
+    log.debug("vk api request: " + url);
+    Loader.Entity data = loader.load(url);
+    String response = new String(data.getBuffer());
+    log.debug("vk api response: " + response);
+    return response;
+  }
+
+  private synchronized void checkRateLimit() throws InterruptedException {
+    // TODO: should make better version? consider serveral last request?
+    long currentTime = System.currentTimeMillis();
+    long farthestRequestTime = rateLimitQueue.peek();
+    if (currentTime - farthestRequestTime < maxRateInterval) {
+      long sleepTime = maxRateInterval - (currentTime - farthestRequestTime);
+      if (sleepTime > 10) log.debug("rate limit exceeded, sleeping for " + sleepTime);
+      Thread.sleep(sleepTime);
+    }
+    rateLimitQueue.remove();
+    rateLimitQueue.put(System.currentTimeMillis());
   }
 
   @Override
   public void send(String message, int userId, String accessToken) {
     try {
-      Loader.Entity data = loader.load("https://api.vk.com/method/messages.send?message=" + message + "&user_id=" + userId +
-        "&guid=" + guidGenerator.getAndIncrement() + "&access_token=" + accessToken + "&v=5.0");
+      apiRequest("https://api.vk.com/method/messages.send?message=" + message + "&user_id=" + userId +
+              "&guid=" + guidGenerator.getAndIncrement() + "&access_token=" + accessToken + "&v=5.0");
       // TODO: check response?
     } catch (Exception e) {
       throw new RuntimeException(e);
@@ -65,9 +97,9 @@ public class VkApiImpl implements VkApi {
   @Override
   public void send(String message, int userId, String accessToken, String latitude, String longitude) {
     try {
-      Loader.Entity data = loader.load("https://api.vk.com/method/messages.send?message=" + message + "&user_id=" + userId +
-        "&lat=" + latitude + "&long=" + longitude +
-        "&guid=" + guidGenerator.getAndIncrement() + "&access_token=" + accessToken + "&v=5.0");
+      apiRequest("https://api.vk.com/method/messages.send?message=" + message + "&user_id=" + userId +
+              "&lat=" + latitude + "&long=" + longitude +
+              "&guid=" + guidGenerator.getAndIncrement() + "&access_token=" + accessToken + "&v=5.0");
       // TODO: check response?
     } catch (Exception e) {
       throw new RuntimeException(e);
@@ -82,8 +114,7 @@ public class VkApiImpl implements VkApi {
   @Override
   public String getCallbackConfirmationCode(String token, String groupId) {
     try {
-      Loader.Entity data = loader.load("https://api.vk.com/method/groups.getCallbackConfirmationCode?group_id=" + groupId + "&access_token=" + token + "&v=5.0");
-      String responseString = new String(data.getBuffer());
+      String responseString = apiRequest("https://api.vk.com/method/groups.getCallbackConfirmationCode?group_id=" + groupId + "&access_token=" + token + "&v=5.0");
       // TODO: proper parsing
       Pattern p = Pattern.compile("\"code\"\\s*:\\s*\"([0-9a-f]+)\"");
       Matcher m = p.matcher(responseString);
@@ -98,10 +129,8 @@ public class VkApiImpl implements VkApi {
   @Override
   public String getCallbackServer(String token, String groupId) {
     try {
-      Loader.Entity data = loader.load("https://api.vk.com/method/groups.getCallbackServerSettings?group_id=" + groupId + "&access_token=" + token + "&v=5.0");
-      String json = new String(data.getBuffer());// {"response":{"server_url":"http:\/\/109.174.72.36\/vkontakte\/alfa.test","secret_key":""}}
-      log.debug("getCallbackServer response: " + json);
-      VkCallbackServerSettings settings = MarshalUtils.unmarshal(json, VkCallbackServerSettings.class);
+      String response = apiRequest("https://api.vk.com/method/groups.getCallbackServerSettings?group_id=" + groupId + "&access_token=" + token + "&v=5.0");
+      VkCallbackServerSettings settings = MarshalUtils.unmarshal(response, VkCallbackServerSettings.class);
       return settings.getServerUrl();
     } catch (Exception e) {
       throw new RuntimeException(e);
@@ -111,15 +140,12 @@ public class VkApiImpl implements VkApi {
   @Override
   public String uploadPhoto(String token, byte[] data) {
     try {
-
       Loader.Entity entity;
-      entity = loader.load("https://api.vk.com/method/photos.getMessagesUploadServer?access_token=" + token + "&v=5.0");
-      String result = new String(entity.getBuffer());
+      String result = apiRequest("https://api.vk.com/method/photos.getMessagesUploadServer?access_token=" + token + "&v=5.0");
       VkUploadServerResponse uploadServerResponse = VkCallbackRequest.readUploadServerResponse(result);
-      log.debug("uploadServerResponse: " + uploadServerResponse);
       if (uploadServerResponse.isError()) return null;
       String uploadUrl = uploadServerResponse.getResponse().getUploadUrl();
-      log.debug("uploadUrl: " + uploadUrl);
+      log.debug("vk uploadUrl: " + uploadUrl);
 
       ByteArrayPartSource partSource = new ByteArrayPartSource("image.jpg", data);
       FilePart part = new FilePart("photo", partSource, "image/jpeg", "UTF-8");
@@ -131,21 +157,16 @@ public class VkApiImpl implements VkApi {
       parts.add(part);
       entity = loader.postMultipart(uploadUrl, Collections.<String, String>emptyMap(), Collections.<String, String>emptyMap(), parts);
       result = new String(entity.getBuffer());
-      log.debug("upload result: " + result);
+      log.debug("vk upload request result: " + result);
 
       VkUploadResponse uploadResponse = VkCallbackRequest.readUploadResponse(result);
-      log.debug("uploadResponse: " + uploadResponse);
       if (uploadResponse.getPhoto().equals("[]")) return null;
 
-      entity = loader.load("https://api.vk.com/method/photos.saveMessagesPhoto?access_token=" + token + "&v=5.0" +
-            "&server=" + uploadResponse.getServer() +
-            "&hash=" + uploadResponse.getHash() +
-            "&photo=" + uploadResponse.getPhoto());
-      result = new String(entity.getBuffer());
-      log.debug("photos.saveMessagesPhoto: " + result);
-      VkSaveMessagesPhotoResponse saveMessagesPhotoResponse =  VkCallbackRequest.readSaveMessagesPhoto(result);
-      log.debug("saveMessagesPhotoResponse: " + saveMessagesPhotoResponse);
-
+      result = apiRequest("https://api.vk.com/method/photos.saveMessagesPhoto?access_token=" + token + "&v=5.0" +
+              "&server=" + uploadResponse.getServer() +
+              "&hash=" + uploadResponse.getHash() +
+              "&photo=" + uploadResponse.getPhoto());
+      VkSaveMessagesPhotoResponse saveMessagesPhotoResponse = VkCallbackRequest.readSaveMessagesPhoto(result);
       VkSaveMessagesPhoto[] photos = saveMessagesPhotoResponse.getResponse();
       if (photos == null || photos.length == 0) return null;
       int id = photos[0].getId();
@@ -158,13 +179,20 @@ public class VkApiImpl implements VkApi {
   }
 
   @Override
+  public VkMessagesGet getMessages(String accessToken) {
+    try {
+      String response = apiRequest("https://api.vk.com/method/messages.get?out=1&offset=0&count=1&time_offset=0&access_token=" + accessToken + "&v=5.0");
+      return MarshalUtils.unmarshal(response, VkMessagesGet.class);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
   public int setCallbackServer(String token, String groupId, String url) {
     try {
-      String apiUrl = "https://api.vk.com/method/groups.setCallbackServer?group_id=" + groupId +
-        "&server_url=" + URLEncoder.encode(url, "UTF-8") + "&access_token=" + token + "&v=5.0";
-      Loader.Entity data = loader.load(apiUrl);
-      String responseString = new String(data.getBuffer());
-      log.debug("groups.setCallbackServer response: " + responseString);
+      String responseString = apiRequest("https://api.vk.com/method/groups.setCallbackServer?group_id=" + groupId +
+              "&server_url=" + URLEncoder.encode(url, "UTF-8") + "&access_token=" + token + "&v=5.0");
       VkSetCallbackServerResponse response = VkCallbackRequest.readSetCallbackServerResponse(responseString);
       // TODO: chekc response
       return response.getResponse().getStateCode();
@@ -176,10 +204,9 @@ public class VkApiImpl implements VkApi {
   @Override
   public void sendAttachment(String attachmentId, int userId, String accessToken) {
     try {
-      Loader.Entity data = loader.load("https://api.vk.com/method/messages.send?attachment=" +
+      apiRequest("https://api.vk.com/method/messages.send?attachment=" +
         attachmentId + "&user_id=" + userId + "&guid=" + guidGenerator.getAndIncrement() +
         "&access_token=" + accessToken + "&v=5.0");
-      log.debug("send attachment result: " + new String(data.getBuffer()));
       // TODO: check response?
     } catch (Exception e) {
       throw new RuntimeException(e);
