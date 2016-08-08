@@ -1,6 +1,5 @@
 package com.eyelinecom.whoisd.sads2.vk.registry;
 
-import com.eyelinecom.whoisd.sads2.common.InitUtils;
 import com.eyelinecom.whoisd.sads2.common.SADSInitUtils;
 import com.eyelinecom.whoisd.sads2.exception.ConfigurationException;
 import com.eyelinecom.whoisd.sads2.registry.Config;
@@ -72,15 +71,23 @@ public class VkServiceRegistry extends ServiceConfigListener {
         confirmationCode = api.getCallbackConfirmationCode(token, groupId);
         log.debug("got confirmationCode: " + confirmationCode);
         int fails = 0;
-        while (true) {
-          int code = api.setCallbackServer(token, groupId, url);
-          if (code == 1) break; // "ok" - success!
-          if (code == 2) continue; // "wait" - retrying requests
-          if (code == 3) throw new RuntimeException("Failed to register callback url for service " + serviceId + ", groupId: " + groupId + " (state=\"incorrect\")");
-          if (code == 4) fails++; // for
-          if (fails > 2) throw new RuntimeException("Failed to register callback url for service " + serviceId + ", groupId: " + groupId + " (state=\"failed\")");
-        }
         serviceMap.put(serviceId, new ServiceEntry(serviceId, groupId, token, confirmationCode));
+        try {
+          while (true) {
+            int code = api.setCallbackServer(token, groupId, url);
+            if (code == 1) break; // "ok" - success!
+            if (code == 2) continue; // "wait" - retrying requests
+            if (code == 3)
+              throw new RuntimeException("Failed to register callback url for service " + serviceId + ", groupId: " + groupId + " (state=\"incorrect\")");
+            if (code == 4) fails++; // for
+            if (fails > 2)
+              throw new RuntimeException("Failed to register callback url for service " + serviceId + ", groupId: " + groupId + " (state=\"failed\")");
+          }
+        } catch (Exception e) {
+          log.error("Failed to register in vk api for token \"" + groupId + ":" + token + "\"", e);
+          serviceMap.remove(serviceId);
+        }
+
       } else {
         serviceMap.put(serviceId, new ServiceEntry(serviceId, groupId, token, confirmationCode));
       }

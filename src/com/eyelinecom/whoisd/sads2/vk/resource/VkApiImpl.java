@@ -53,7 +53,7 @@ public class VkApiImpl implements VkApi {
   public VkApiImpl(HttpDataLoader loader, Properties properties) {
     this.loader = loader;
     this.properties = properties;
-    this.maxRateLimit = Integer.parseInt(properties.getProperty("rate.limit", "3"));
+    this.maxRateLimit = Integer.parseInt(properties.getProperty("rate.limit", "2"));
     this.maxRateInterval = Integer.parseInt(properties.getProperty("rate.interval", "1000"));
     this.connectorUrl = properties.getProperty("connector.url");
     this.rateLimitQueue = new ArrayBlockingQueue<>(maxRateLimit);
