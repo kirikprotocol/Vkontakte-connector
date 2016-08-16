@@ -12,6 +12,7 @@ import com.eyelinecom.whoisd.sads2.vk.api.types.VkSaveMessagesPhotoResponse;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkSetCallbackServerResponse;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkUploadResponse;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkUploadServerResponse;
+import com.eyelinecom.whoisd.sads2.vk.api.types.VkUsersGet;
 import com.eyelinecom.whoisd.sads2.vk.connector.VkCallbackRequest;
 import com.eyelinecom.whoisd.sads2.vk.util.MarshalUtils;
 import org.apache.commons.configuration.HierarchicalConfiguration;
@@ -183,6 +184,16 @@ public class VkApiImpl implements VkApi {
     try {
       String response = apiRequest("https://api.vk.com/method/messages.get?out=1&offset=0&count=1&time_offset=0&access_token=" + accessToken + "&v=5.0");
       return MarshalUtils.unmarshal(response, VkMessagesGet.class);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public VkUsersGet groupsGetManagers(int groupId, String accessToken) {
+    try {
+      String response = apiRequest("https://api.vk.com/method/groups.getMembers?group_id=" + groupId + "&filter=managers&count=1&access_token=" + accessToken + "&v=5.0");
+      return MarshalUtils.unmarshal(response, VkUsersGet.class);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
