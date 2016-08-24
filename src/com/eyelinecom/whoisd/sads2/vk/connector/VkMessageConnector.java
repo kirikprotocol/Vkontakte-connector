@@ -2,12 +2,13 @@ package com.eyelinecom.whoisd.sads2.vk.connector;
 
 import com.eyelinecom.whoisd.sads2.Protocol;
 import com.eyelinecom.whoisd.sads2.common.InitUtils;
-import com.eyelinecom.whoisd.sads2.common.SADSLogger;
 import com.eyelinecom.whoisd.sads2.common.SADSUrlUtils;
 import com.eyelinecom.whoisd.sads2.common.UrlUtils;
 import com.eyelinecom.whoisd.sads2.connector.SADSRequest;
 import com.eyelinecom.whoisd.sads2.connector.SADSResponse;
 import com.eyelinecom.whoisd.sads2.connector.Session;
+import com.eyelinecom.whoisd.sads2.events.LinkEvent;
+import com.eyelinecom.whoisd.sads2.events.MessageEvent.TextMessageEvent;
 import com.eyelinecom.whoisd.sads2.exception.NotFoundResourceException;
 import com.eyelinecom.whoisd.sads2.executors.connector.AbstractHTTPPushConnector;
 import com.eyelinecom.whoisd.sads2.executors.connector.ProfileEnabledMessageConnector;
@@ -17,13 +18,10 @@ import com.eyelinecom.whoisd.sads2.input.InputFile;
 import com.eyelinecom.whoisd.sads2.input.InputLocation;
 import com.eyelinecom.whoisd.sads2.profile.Profile;
 import com.eyelinecom.whoisd.sads2.registry.ServiceConfig;
-import com.eyelinecom.whoisd.sads2.session.ServiceSessionManager;
 import com.eyelinecom.whoisd.sads2.session.SessionManager;
 import com.eyelinecom.whoisd.sads2.utils.ConnectorUtils;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkAttachment;
-import com.eyelinecom.whoisd.sads2.vk.api.types.VkCallBack;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkDoc;
-import com.eyelinecom.whoisd.sads2.vk.api.types.VkGeo;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkObject;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkPhoto;
 import com.eyelinecom.whoisd.sads2.vk.registry.VkServiceRegistry;
@@ -116,11 +114,16 @@ public class VkMessageConnector extends HttpServlet {
           throw new RuntimeException(e);
         }
         return buildCallbackResponse(200, callbackConfirmationCode);
-      } else return buildCallbackResponse(200, "ok");
+
+      } else {
+        return buildCallbackResponse(200, "ok");
+      }
     }
 
     @Override
-    protected SADSResponse buildQueueErrorResponse(Exception e, VkCallbackRequest vkCallbackRequest, SADSRequest sadsRequest) {
+    protected SADSResponse buildQueueErrorResponse(Exception e,
+                                                   VkCallbackRequest vkCallbackRequest,
+                                                   SADSRequest sadsRequest) {
       return buildCallbackResponse(500, "");
     }
 
@@ -131,12 +134,12 @@ public class VkMessageConnector extends HttpServlet {
 
     @Override
     protected String getSubscriberId(VkCallbackRequest req) throws Exception {
-
       if (req.getProfile() != null) {
         return req.getProfile().getWnumber();
       }
-      String userId = String.valueOf(req.getCallback().getObject().getUserId());
-      Profile profile = getProfileStorage()
+
+      final String userId = String.valueOf(req.getCallback().getObject().getUserId());
+      final Profile profile = getProfileStorage()
         .query()
         .where(property("vkontakte", "id").eq(userId))
         .getOrCreate();
@@ -165,18 +168,21 @@ public class VkMessageConnector extends HttpServlet {
       return VKONTAKTE;
     }
 
-
     @Override
-    protected String getRequestUri(ServiceConfig config, String wnumber, VkCallbackRequest message) throws Exception {
+    protected String getRequestUri(ServiceConfig config,
+                                   String wnumber,
+                                   VkCallbackRequest message) throws Exception {
 
       final String serviceId = config.getId();
-      String incoming = message.getCallback().getObject().getBody();
+      final String incoming = message.getCallback().getObject().getBody();
 
       Session session = getSessionManager(serviceId).getSession(wnumber);
       final String prevUri = (String) session.getAttribute(ATTR_SESSION_PREVIOUS_PAGE_URI);
       if (prevUri == null) {
         // No previous page means this is an initial request, thus serve the start page.
+        message.setEvent(new TextMessageEvent(incoming));
         return super.getRequestUri(config, wnumber, message);
+
       } else {
         final Document prevPage =
           (Document) session.getAttribute(SADSExecutor.ATTR_SESSION_PREVIOUS_PAGE);
@@ -193,6 +199,8 @@ public class VkMessageConnector extends HttpServlet {
           if (equalsIgnoreCase(btnLabel, incoming) || equalsIgnoreCase(btnIndex, incoming)) {
             final String btnHref = e.attributeValue("href");
             href = btnHref != null ? btnHref : e.attributeValue("target");
+
+            message.setEvent(new LinkEvent(btnLabel, prevUri));
           }
         }
 
@@ -212,6 +220,11 @@ public class VkMessageConnector extends HttpServlet {
           href = UrlUtils.merge(prevUri, badCommandPage);
           href = UrlUtils.addParameter(href, "bad_command", incoming);
         }
+
+        if (message.getEvent() == null) {
+          message.setEvent(new TextMessageEvent(incoming));
+        }
+
         href = SADSUrlUtils.processUssdForm(href, StringUtils.trim(incoming));
         if (inputName != null) {
           href = UrlUtils.addParameter(href, inputName, incoming);
@@ -222,62 +235,45 @@ public class VkMessageConnector extends HttpServlet {
     }
 
     @Override
-    protected SADSResponse getOuterResponse(VkCallbackRequest vkCallbackRequest, SADSRequest request, SADSResponse response) {
+    protected SADSResponse getOuterResponse(VkCallbackRequest vkCallbackRequest,
+                                            SADSRequest request,
+                                            SADSResponse response) {
       return buildCallbackResponse(200, "ok");
     }
 
-    @Override
-    protected SADSResponse sadsRequestBuildError(Exception e, VkCallbackRequest req) {
-      getLog(req).error("SADSRequest build error", e);
-      return null;
-    }
-
-    @Override
-    protected SADSResponse sadsResponseBuildError(Exception e, VkCallbackRequest req, SADSRequest sadsRequest) {
-      getLog(req).error("SADSResponse build error", e);
-      return null;
-    }
-
-    @Override
-    protected SADSResponse messageProcessingError(Exception e, VkCallbackRequest req, SADSRequest sadsRequest, SADSResponse response) {
-      getLog(req).error("Message processing error", e);
-      return null;
-    }
-
     private SessionManager getSessionManager(String serviceId) throws Exception {
-      final ServiceSessionManager serviceSessionManager =
-        (ServiceSessionManager) getResource("session-manager");
-      return serviceSessionManager.getSessionManager(VKONTAKTE, serviceId);
+      return super.getSessionManager(VKONTAKTE, serviceId);
     }
 
     @Override
     protected void fillSADSRequest(SADSRequest sadsRequest, VkCallbackRequest request) {
       super.fillSADSRequest(sadsRequest, request);
+
       try {
         handleFileUpload(sadsRequest, request);
-      } catch (Exception e) {
-        log.error(e.getMessage(), e);
-      }
 
-      super.fillSADSRequest(sadsRequest, request);
+      } catch (Exception e) {
+        getLog(request).error(e.getMessage(), e);
+      }
     }
 
     private void handleFileUpload(SADSRequest sadsRequest, VkCallbackRequest req) throws Exception {
-      final List<? extends AbstractInputType> mediaList = extractMedia(sadsRequest, req);
+      final List<? extends AbstractInputType> mediaList = extractMedia(req);
       if (isEmpty(mediaList)) return;
 
-      Session session = sadsRequest.getSession();
-      Document prevPage = (Document) session.getAttribute(SADSExecutor.ATTR_SESSION_PREVIOUS_PAGE);
-      Element input = prevPage == null ? null : prevPage.getRootElement().element("input");
-      String inputName = input != null ? input.attributeValue("name") : "bad_command";
+      req.setEvent(mediaList.iterator().next().asEvent());
+
+      final Session session = sadsRequest.getSession();
+      final Document prevPage = (Document) session.getAttribute(SADSExecutor.ATTR_SESSION_PREVIOUS_PAGE);
+      final Element input = prevPage == null ? null : prevPage.getRootElement().element("input");
+      final String inputName = input != null ? input.attributeValue("name") : "bad_command";
 
       final String mediaParameter = MarshalUtils.marshal(mediaList);
       sadsRequest.getParameters().put(inputName, mediaParameter);
       sadsRequest.getParameters().put("input_type", "json");
     }
 
-    private List<? extends AbstractInputType> extractMedia(SADSRequest sadsRequest, VkCallbackRequest req) {
-      final String serviceId = sadsRequest.getServiceId();
+    private List<? extends AbstractInputType> extractMedia(VkCallbackRequest req) {
       final VkObject object = req.getCallback().getObject();
       final List<AbstractInputType> mediaList = new ArrayList<>();
 
@@ -319,19 +315,9 @@ public class VkMessageConnector extends HttpServlet {
       return rc;
     }
 
-    private Log getLog(VkCallbackRequest req) {
-      try {
-        return SADSLogger.getLogger(getServiceId(req), getSubscriberId(req), getClass());
-
-      } catch (Exception e) {
-        return getLogger();
-      }
-    }
-
     private VkServiceRegistry getServiceRegistry() throws NotFoundResourceException {
       return (VkServiceRegistry) getResource("vkontakte-service-registry");
     }
-
 
   }
 }

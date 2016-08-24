@@ -1,6 +1,7 @@
 package com.eyelinecom.whoisd.sads2.vk.connector;
 
 import com.eyelinecom.whoisd.sads2.common.StoredHttpRequest;
+import com.eyelinecom.whoisd.sads2.events.Event;
 import com.eyelinecom.whoisd.sads2.profile.Profile;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkCallBack;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkSaveMessagesPhotoResponse;
@@ -28,6 +29,7 @@ public class VkCallbackRequest extends StoredHttpRequest {
   private final VkCallBack callback;
 
   private transient Profile profile;
+  private transient Event event;
 
   public VkCallbackRequest(HttpServletRequest request) throws IOException {
     super(request);
@@ -51,6 +53,14 @@ public class VkCallbackRequest extends StoredHttpRequest {
 
   public void setProfile(Profile profile) {
     this.profile = profile;
+  }
+
+  public Event getEvent() {
+    return event;
+  }
+
+  public void setEvent(Event event) {
+    this.event = event;
   }
 
   private static final ObjectMapper mapper = new ObjectMapper();
