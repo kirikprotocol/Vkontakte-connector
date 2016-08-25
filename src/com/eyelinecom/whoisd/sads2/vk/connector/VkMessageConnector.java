@@ -7,6 +7,7 @@ import com.eyelinecom.whoisd.sads2.common.UrlUtils;
 import com.eyelinecom.whoisd.sads2.connector.SADSRequest;
 import com.eyelinecom.whoisd.sads2.connector.SADSResponse;
 import com.eyelinecom.whoisd.sads2.connector.Session;
+import com.eyelinecom.whoisd.sads2.events.Event;
 import com.eyelinecom.whoisd.sads2.events.LinkEvent;
 import com.eyelinecom.whoisd.sads2.events.MessageEvent.TextMessageEvent;
 import com.eyelinecom.whoisd.sads2.exception.NotFoundResourceException;
@@ -255,6 +256,16 @@ public class VkMessageConnector extends HttpServlet {
       } catch (Exception e) {
         getLog(request).error(e.getMessage(), e);
       }
+    }
+
+    @Override
+    protected Profile getCachedProfile(VkCallbackRequest req) {
+      return req.getProfile();
+    }
+
+    @Override
+    protected Event getEvent(VkCallbackRequest req) {
+      return req.getEvent();
     }
 
     private void handleFileUpload(SADSRequest sadsRequest, VkCallbackRequest req) throws Exception {
