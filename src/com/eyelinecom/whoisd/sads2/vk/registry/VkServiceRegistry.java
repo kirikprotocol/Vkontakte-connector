@@ -95,8 +95,10 @@ public class VkServiceRegistry extends ServiceConfigListener {
   }
 
   private void unregister(String serviceId) {
-    log.debug("unregistering " + serviceId);
-    serviceMap.remove(serviceId);
+    final ServiceEntry prevEntry = serviceMap.remove(serviceId);
+    if (prevEntry != null) {
+      log.debug("Unregistered " + serviceId);
+    }
     // TODO: url in group setting will remain for old service, should do anything about it?
   }
 
