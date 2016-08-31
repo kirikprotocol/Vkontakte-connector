@@ -248,14 +248,14 @@ public class VkMessageConnector extends HttpServlet {
 
     @Override
     protected void fillSADSRequest(SADSRequest sadsRequest, VkCallbackRequest request) {
-      super.fillSADSRequest(sadsRequest, request);
-
       try {
         handleFileUpload(sadsRequest, request);
 
       } catch (Exception e) {
         getLog(request).error(e.getMessage(), e);
       }
+
+      super.fillSADSRequest(sadsRequest, request);
     }
 
     @Override
