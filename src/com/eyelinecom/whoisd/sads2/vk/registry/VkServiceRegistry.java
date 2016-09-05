@@ -136,6 +136,10 @@ public class VkServiceRegistry extends ServiceConfigListener {
     return VkBotSettings.get(properties.getProperty(VkServiceRegistry.CONF_TOKEN));
   }
 
+  public static String getChatUrl(String groupId) {
+    return "https://vk.com/im?sel=-" + groupId;
+  }
+
   public static class Factory implements ResourceFactory {
 
     @Override

@@ -4,6 +4,7 @@ import com.eyelinecom.whoisd.sads2.Protocol;
 import com.eyelinecom.whoisd.sads2.common.InitUtils;
 import com.eyelinecom.whoisd.sads2.common.SADSUrlUtils;
 import com.eyelinecom.whoisd.sads2.common.UrlUtils;
+import com.eyelinecom.whoisd.sads2.connector.ChatCommand;
 import com.eyelinecom.whoisd.sads2.connector.SADSRequest;
 import com.eyelinecom.whoisd.sads2.connector.SADSResponse;
 import com.eyelinecom.whoisd.sads2.connector.Session;
@@ -26,6 +27,7 @@ import com.eyelinecom.whoisd.sads2.vk.api.types.VkDoc;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkObject;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkPhoto;
 import com.eyelinecom.whoisd.sads2.vk.registry.VkServiceRegistry;
+import com.eyelinecom.whoisd.sads2.vk.resource.VkApi;
 import com.eyelinecom.whoisd.sads2.vk.util.MarshalUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
@@ -45,6 +47,10 @@ import java.util.List;
 import java.util.Properties;
 
 import static com.eyelinecom.whoisd.sads2.Protocol.VKONTAKTE;
+import static com.eyelinecom.whoisd.sads2.connector.ChatCommand.CLEAR_PROFILE;
+import static com.eyelinecom.whoisd.sads2.connector.ChatCommand.INVALIDATE_SESSION;
+import static com.eyelinecom.whoisd.sads2.connector.ChatCommand.SHOW_PROFILE;
+import static com.eyelinecom.whoisd.sads2.connector.ChatCommand.WHO_IS;
 import static com.eyelinecom.whoisd.sads2.wstorage.profile.QueryRestrictions.property;
 import static org.apache.commons.collections.CollectionUtils.isEmpty;
 import static org.apache.commons.lang.StringUtils.equalsIgnoreCase;
@@ -140,6 +146,18 @@ public class VkMessageConnector extends HttpServlet {
       }
 
       final String userId = String.valueOf(req.getCallback().getObject().getUserId());
+      final String incoming = req.getCallback().getObject().getBody();
+      if (ChatCommand.match(getServiceId(req), incoming, VKONTAKTE) == CLEAR_PROFILE) {
+        // Reset profile of the current user.
+        final Profile profile = getProfileStorage()
+            .query()
+            .where(property("vkontakte", "id").eq(userId))
+            .get();
+        if (profile != null) {
+          profile.delete();
+        }
+      }
+
       final Profile profile = getProfileStorage()
         .query()
         .where(property("vkontakte", "id").eq(userId))
@@ -176,8 +194,42 @@ public class VkMessageConnector extends HttpServlet {
 
       final String serviceId = config.getId();
       final String incoming = message.getCallback().getObject().getBody();
+      final SessionManager sessionManager = getSessionManager(serviceId);
 
-      Session session = getSessionManager(serviceId).getSession(wnumber);
+      Session session = sessionManager.getSession(wnumber);
+
+      final ChatCommand cmd = ChatCommand.match(serviceId, incoming, VKONTAKTE);
+      if (cmd == INVALIDATE_SESSION) {
+        // Invalidate the current session.
+        session.close();
+        session = sessionManager.getSession(wnumber);
+
+      } else if (cmd == WHO_IS) {
+        final String accessToken = VkServiceRegistry.getAccessToken(config.getAttributes());
+        final Integer userId = message.getCallback().getObject().getUserId();
+        final String groupId = getServiceRegistry().getGroupId(serviceId);
+
+        final String msg =
+            StringUtils.join(
+                new String[] {
+                    "Chat URL: " + VkServiceRegistry.getChatUrl(groupId) + ".",
+                    "Group ID: " + groupId + ".",
+                    "Access token: " + accessToken + ".",
+                    "Service: " + serviceId + ".",
+                    "Mobilizer instance: " + getRootUri()
+                },
+                "\n");
+        getClient().send(msg, userId, accessToken);
+
+      } else if (cmd == SHOW_PROFILE) {
+        final Profile profile = getProfileStorage().find(wnumber);
+
+        final String accessToken = VkServiceRegistry.getAccessToken(config.getAttributes());
+        final Integer userId = message.getCallback().getObject().getUserId();
+
+        getClient().send(profile.dump(), userId, accessToken);
+      }
+
       final String prevUri = (String) session.getAttribute(ATTR_SESSION_PREVIOUS_PAGE_URI);
       if (prevUri == null) {
         // No previous page means this is an initial request, thus serve the start page.
@@ -328,6 +380,10 @@ public class VkMessageConnector extends HttpServlet {
 
     private VkServiceRegistry getServiceRegistry() throws NotFoundResourceException {
       return (VkServiceRegistry) getResource("vkontakte-service-registry");
+    }
+
+    private VkApi getClient() throws NotFoundResourceException {
+      return (VkApi) getResource("vkontakte-api");
     }
 
   }
