@@ -379,11 +379,11 @@ public class VkMessageConnector extends HttpServlet {
     }
 
     private VkServiceRegistry getServiceRegistry() throws NotFoundResourceException {
-      return (VkServiceRegistry) getResource("vkontakte-service-registry");
+      return getResource("vkontakte-service-registry");
     }
 
     private VkApi getClient() throws NotFoundResourceException {
-      return (VkApi) getResource("vkontakte-api");
+      return getResource("vkontakte-api");
     }
 
   }
