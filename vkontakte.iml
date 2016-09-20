@@ -19,6 +19,11 @@
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="module" module-name="Utils" />
+    <orderEntry type="module" module-name="core" />
+    <orderEntry type="module" module-name="Impl" />
+    <orderEntry type="module" module-name="statistics" />
+    <orderEntry type="module" module-name="profile-storage" />
     <orderEntry type="module-library">
       <library name="IvyIDEA-vkontakte-default">
         <CLASSES>
@@ -147,6 +152,7 @@
           <root url="jar://$USER_HOME$/.ivy2/cache/com.fasterxml.jackson.core/jackson-annotations/bundles/jackson-annotations-2.7.2.jar!/" />
           <root url="jar://$USER_HOME$/.ivy2/cache/com.fasterxml.jackson.core/jackson-databind/bundles/jackson-databind-2.7.2.jar!/" />
           <root url="jar://$USER_HOME$/.ivy2/cache/mobi.eyeline.utils/db-template/jars/db-template-0.03.jar!/" />
+          <root url="jar://$USER_HOME$/.ivy2/cache/mobi.eyeline.mobilizer/sads-smpp/jars/sads-smpp-0.106.jar!/" />
         </CLASSES>
         <JAVADOC>
           <root url="jar://$USER_HOME$/.ivy2/cache/commons-collections/commons-collections/javadocs/commons-collections-3.2.1-javadoc.jar!/" />
@@ -308,10 +314,5 @@
         </SOURCES>
       </library>
     </orderEntry>
-    <orderEntry type="module" module-name="Utils" />
-    <orderEntry type="module" module-name="core" />
-    <orderEntry type="module" module-name="Impl" />
-    <orderEntry type="module" module-name="statistics" />
-    <orderEntry type="module" module-name="profile-storage" />
   </component>
 </module>
