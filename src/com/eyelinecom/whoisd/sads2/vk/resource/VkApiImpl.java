@@ -4,6 +4,8 @@ import com.eyelinecom.whoisd.sads2.common.HttpDataLoader;
 import com.eyelinecom.whoisd.sads2.common.Loader;
 import com.eyelinecom.whoisd.sads2.common.SADSInitUtils;
 import com.eyelinecom.whoisd.sads2.common.UrlUtils;
+import com.eyelinecom.whoisd.sads2.eventstat.DetailedStatLogger;
+import com.eyelinecom.whoisd.sads2.executors.connector.Context;
 import com.eyelinecom.whoisd.sads2.resource.ResourceFactory;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkCallbackServerSettings;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkMessagesGet;
@@ -45,14 +47,19 @@ public class VkApiImpl implements VkApi {
   private static final AtomicLong guidGenerator = new AtomicLong(System.currentTimeMillis());
 
   private final HttpDataLoader loader;
+  private final DetailedStatLogger detailedStatLogger;
   private final Properties properties;
   private final int maxRateLimit;
   private final int maxRateInterval;
   private final String connectorUrl;
   private final ArrayBlockingQueue<Long> rateLimitQueue;
 
-  public VkApiImpl(HttpDataLoader loader, Properties properties) {
+  public VkApiImpl(HttpDataLoader loader,
+                   DetailedStatLogger detailedStatLogger,
+                   Properties properties) {
+
     this.loader = loader;
+    this.detailedStatLogger = detailedStatLogger;
     this.properties = properties;
     this.maxRateLimit = Integer.parseInt(properties.getProperty("rate.limit", "2"));
     this.maxRateInterval = Integer.parseInt(properties.getProperty("rate.interval", "1000"));
@@ -65,6 +72,11 @@ public class VkApiImpl implements VkApi {
     //queue.
     checkRateLimit();
     log.debug("vk api request: " + url);
+
+    if (Context.getSadsRequest() != null) {
+      detailedStatLogger.onOuterResponse(Context.getSadsRequest(), url);
+    }
+
     Loader.Entity data = loader.load(url);
     String response = new String(data.getBuffer());
     log.debug("vk api response: " + response);
@@ -229,7 +241,8 @@ public class VkApiImpl implements VkApi {
     @Override
     public Object build(String id, Properties properties, HierarchicalConfiguration config) throws Exception {
       final HttpDataLoader loader = SADSInitUtils.getResource("loader", properties);
-      return new VkApiImpl(loader, properties);
+      final DetailedStatLogger detailedStatLogger = SADSInitUtils.getResource("detailed-stat-logger", properties);
+      return new VkApiImpl(loader, detailedStatLogger, properties);
     }
 
     @Override
