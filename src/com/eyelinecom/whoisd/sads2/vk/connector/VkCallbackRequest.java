@@ -2,6 +2,7 @@ package com.eyelinecom.whoisd.sads2.vk.connector;
 
 import com.eyelinecom.whoisd.sads2.common.StoredHttpRequest;
 import com.eyelinecom.whoisd.sads2.events.Event;
+import com.eyelinecom.whoisd.sads2.eventstat.LoggableExternalRequest;
 import com.eyelinecom.whoisd.sads2.profile.Profile;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkCallBack;
 import com.eyelinecom.whoisd.sads2.vk.api.types.VkSaveMessagesPhotoResponse;
@@ -23,7 +24,7 @@ import java.io.IOException;
  * Time: 4:01
  * To change this template use File | Settings | File Templates.
  */
-public class VkCallbackRequest extends StoredHttpRequest {
+public class VkCallbackRequest extends StoredHttpRequest implements LoggableExternalRequest {
 
   private final String serviceId;
   private final VkCallBack callback;
@@ -91,4 +92,8 @@ public class VkCallbackRequest extends StoredHttpRequest {
     return mapper.readerFor(VkSetCallbackServerResponse.class).readValue(mapper.readTree(json));
   }
 
+  @Override
+  public Object getLoggableData() {
+    return getCallback();
+  }
 }
