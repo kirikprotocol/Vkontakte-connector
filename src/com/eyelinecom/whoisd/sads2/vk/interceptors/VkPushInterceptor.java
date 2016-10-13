@@ -9,13 +9,11 @@ import com.eyelinecom.whoisd.sads2.connector.SADSResponse;
 import com.eyelinecom.whoisd.sads2.connector.Session;
 import com.eyelinecom.whoisd.sads2.content.ContentRequestUtils;
 import com.eyelinecom.whoisd.sads2.content.ContentResponse;
-import com.eyelinecom.whoisd.sads2.content.attachments.Attachment;
 import com.eyelinecom.whoisd.sads2.content.attributes.AttributeReader;
+import com.eyelinecom.whoisd.sads2.content.attributes.AttributeSet;
 import com.eyelinecom.whoisd.sads2.exception.InterceptionException;
 import com.eyelinecom.whoisd.sads2.executors.connector.SADSExecutor;
 import com.eyelinecom.whoisd.sads2.interceptor.BlankInterceptor;
-import com.eyelinecom.whoisd.sads2.session.ServiceSessionManager;
-import com.eyelinecom.whoisd.sads2.session.SessionManager;
 import com.eyelinecom.whoisd.sads2.vk.registry.VkServiceRegistry;
 import com.eyelinecom.whoisd.sads2.vk.resource.VkApi;
 import org.apache.commons.collections.IteratorUtils;
@@ -36,8 +34,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
-import static com.eyelinecom.whoisd.sads2.content.attachments.Attachment.Type.LOCATION;
-import static com.eyelinecom.whoisd.sads2.content.attachments.Attachment.Type.fromString;
 import static com.eyelinecom.whoisd.sads2.content.attributes.AttributeReader.getAttributes;
 import static com.eyelinecom.whoisd.sads2.executors.connector.ProfileEnabledMessageConnector.ATTR_SESSION_PREVIOUS_PAGE_URI;
 import static org.apache.commons.collections.CollectionUtils.isEmpty;
@@ -54,7 +50,6 @@ public class VkPushInterceptor extends BlankInterceptor implements Initable {
 
   private static final org.apache.log4j.Logger log = org.apache.log4j.Logger.getLogger(VkPushInterceptor.class);
   private VkApi client;
-  private ServiceSessionManager sessionManager;
 
   private static final CharSequenceTranslator ESCAPE_VK =
       new AggregateTranslator(
@@ -79,7 +74,6 @@ public class VkPushInterceptor extends BlankInterceptor implements Initable {
       if (isNotBlank(request.getParameters().get("sadsSmsMessage"))) {
         // TODO
       } else {
-        final String serviceId = request.getServiceId();
         final Document doc = (Document) response.getAttributes().get(PageBuilder.VALUE_DOCUMENT);
         final String keyboard = getKeyboard(doc);
 
@@ -87,11 +81,20 @@ public class VkPushInterceptor extends BlankInterceptor implements Initable {
 
         final boolean isNothingToSend = StringUtils.isBlank(text) && keyboard == null;
         if (!isNothingToSend) text = text.isEmpty() ? "." : text;
-        final boolean shouldCloseSession =
-          keyboard == null && doc.getRootElement().elements("input").isEmpty();
 
-        final SessionManager sessionManager =
-          this.sessionManager.getSessionManager(request.getProtocol(), serviceId);
+        final boolean shouldCloseSession;
+        {
+          if (keyboard != null || !doc.getRootElement().elements("input").isEmpty()) {
+            shouldCloseSession = false;
+
+          } else {
+            final AttributeSet pageAttributes = getAttributes(doc.getRootElement());
+            shouldCloseSession = !pageAttributes.getBoolean("vkontakte.keep.session")
+                .or(pageAttributes.getBoolean("keep.session"))
+                .or(false);
+          }
+        }
+
         final Session session = request.getSession();
 
         if (!shouldCloseSession) {
@@ -172,8 +175,7 @@ public class VkPushInterceptor extends BlankInterceptor implements Initable {
 
   @Override
   public void init(Properties config) throws Exception {
-    client = (VkApi) SADSInitUtils.getResource("client", config);
-    sessionManager = (ServiceSessionManager) SADSInitUtils.getResource("session-manager", config);
+    client = SADSInitUtils.getResource("client", config);
   }
 
   @Override
