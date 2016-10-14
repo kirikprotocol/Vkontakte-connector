@@ -2,6 +2,7 @@ package com.eyelinecom.whoisd.sads2.vk.connector;
 
 import com.eyelinecom.whoisd.sads2.Protocol;
 import com.eyelinecom.whoisd.sads2.common.InitUtils;
+import com.eyelinecom.whoisd.sads2.common.ProfileUtil;
 import com.eyelinecom.whoisd.sads2.common.SADSUrlUtils;
 import com.eyelinecom.whoisd.sads2.common.UrlUtils;
 import com.eyelinecom.whoisd.sads2.connector.ChatCommand;
@@ -30,6 +31,7 @@ import com.eyelinecom.whoisd.sads2.vk.registry.VkServiceRegistry;
 import com.eyelinecom.whoisd.sads2.vk.resource.VkApi;
 import com.eyelinecom.whoisd.sads2.vk.util.MarshalUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.impl.Log4JLogger;
 import org.dom4j.Document;
@@ -47,11 +49,14 @@ import java.util.List;
 import java.util.Properties;
 
 import static com.eyelinecom.whoisd.sads2.Protocol.VKONTAKTE;
+import static com.eyelinecom.whoisd.sads2.common.ProfileUtil.inProfile;
 import static com.eyelinecom.whoisd.sads2.connector.ChatCommand.CLEAR_PROFILE;
 import static com.eyelinecom.whoisd.sads2.connector.ChatCommand.INVALIDATE_SESSION;
+import static com.eyelinecom.whoisd.sads2.connector.ChatCommand.SET_DEVELOPER_MODE;
 import static com.eyelinecom.whoisd.sads2.connector.ChatCommand.SHOW_PROFILE;
 import static com.eyelinecom.whoisd.sads2.connector.ChatCommand.WHO_IS;
 import static com.eyelinecom.whoisd.sads2.wstorage.profile.QueryRestrictions.property;
+import static java.util.Arrays.asList;
 import static org.apache.commons.collections.CollectionUtils.isEmpty;
 import static org.apache.commons.lang.StringUtils.equalsIgnoreCase;
 
@@ -147,6 +152,7 @@ public class VkMessageConnector extends HttpServlet {
 
       final String userId = String.valueOf(req.getCallback().getObject().getUserId());
       final String incoming = req.getCallback().getObject().getBody();
+
       if (ChatCommand.match(getServiceId(req), incoming, VKONTAKTE) == CLEAR_PROFILE) {
         // Reset profile of the current user.
         final Profile profile = getProfileStorage()
@@ -154,7 +160,10 @@ public class VkMessageConnector extends HttpServlet {
             .where(property("vkontakte", "id").eq(userId))
             .get();
         if (profile != null) {
-          profile.delete();
+          final boolean isDevModeEnabled = inProfile(profile).getDeveloperMode(req.getServiceId());
+          if (isDevModeEnabled) {
+            profile.delete();
+          }
         }
       }
 
@@ -183,6 +192,18 @@ public class VkMessageConnector extends HttpServlet {
     }
 
     @Override
+    protected boolean isTerminated(VkCallbackRequest req) throws Exception {
+      final String incoming = req.getCallback().getObject().getBody();
+
+      final boolean isDevModeEnabled = req.getProfile() != null &&
+          ProfileUtil.inProfile(req.getProfile()).getDeveloperMode(req.getServiceId());
+
+      final ChatCommand command = ChatCommand.match(getServiceId(req), incoming, VKONTAKTE);
+      return command == SET_DEVELOPER_MODE ||
+          isDevModeEnabled && asList(SHOW_PROFILE, WHO_IS).contains(command);
+    }
+
+    @Override
     protected Protocol getRequestProtocol(ServiceConfig config, String subscriberId, VkCallbackRequest request) {
       return VKONTAKTE;
     }
@@ -195,39 +216,66 @@ public class VkMessageConnector extends HttpServlet {
       final String serviceId = config.getId();
       final String incoming = message.getCallback().getObject().getBody();
       final SessionManager sessionManager = getSessionManager(serviceId);
+      final Profile profile = getProfileStorage().find(wnumber);
+      final boolean isDevModeEnabled = inProfile(profile).getDeveloperMode(serviceId);
 
       Session session = sessionManager.getSession(wnumber);
 
       final ChatCommand cmd = ChatCommand.match(serviceId, incoming, VKONTAKTE);
-      if (cmd == INVALIDATE_SESSION) {
+      if (cmd == INVALIDATE_SESSION && isDevModeEnabled) {
         // Invalidate the current session.
         session.close();
         session = sessionManager.getSession(wnumber);
 
-      } else if (cmd == WHO_IS) {
-        final String accessToken = VkServiceRegistry.getAccessToken(config.getAttributes());
-        final Integer userId = message.getCallback().getObject().getUserId();
-        final String groupId = getServiceRegistry().getGroupId(serviceId);
+      } else {
+        final VkApi client = getClient();
 
-        final String msg =
-            StringUtils.join(
-                new String[] {
-                    "Chat URL: " + VkServiceRegistry.getChatUrl(groupId) + ".",
-                    "Group ID: " + groupId + ".",
-                    "Access token: " + accessToken + ".",
-                    "Service: " + serviceId + ".",
-                    "Mobilizer instance: " + getRootUri()
-                },
-                "\n");
-        getClient().send(msg, userId, accessToken);
+        if (cmd == WHO_IS && isDevModeEnabled) {
+          final String accessToken = VkServiceRegistry.getAccessToken(config.getAttributes());
+          final Integer userId = message.getCallback().getObject().getUserId();
+          final String groupId = getServiceRegistry().getGroupId(serviceId);
 
-      } else if (cmd == SHOW_PROFILE) {
-        final Profile profile = getProfileStorage().find(wnumber);
+          final String msg =
+              StringUtils.join(
+                  new String[] {
+                      "Chat URL: " + VkServiceRegistry.getChatUrl(groupId) + ".",
+                      "Group ID: " + groupId + ".",
+                      "Access token: " + accessToken + ".",
+                      "Service: " + serviceId + ".",
+                      "Mobilizer instance: " + getRootUri()
+                  },
+                  "\n");
+          client.send(msg, userId, accessToken);
 
-        final String accessToken = VkServiceRegistry.getAccessToken(config.getAttributes());
-        final Integer userId = message.getCallback().getObject().getUserId();
+        } else if (cmd == SHOW_PROFILE && isDevModeEnabled) {
+          final String accessToken = VkServiceRegistry.getAccessToken(config.getAttributes());
+          final Integer userId = message.getCallback().getObject().getUserId();
 
-        getClient().send(profile.dump(), userId, accessToken);
+          client.send(profile.dump(), userId, accessToken);
+
+        } else if (cmd == SET_DEVELOPER_MODE) {
+          final String value = ChatCommand.getCommandValue(incoming);
+          final Boolean devMode = BooleanUtils.toBooleanObject(value);
+          final String accessToken = VkServiceRegistry.getAccessToken(config.getAttributes());
+          final Integer userId = message.getCallback().getObject().getUserId();
+
+          if (devMode != null) {
+            inProfile(profile).setDeveloperMode(serviceId, devMode);
+
+            client.send(
+                "Developer mode is " + (devMode ? "enabled" : "disabled") + ".",
+                userId,
+                accessToken);
+
+          } else {
+            client.send(
+                "Developer mode is " +
+                    (inProfile(profile).getDeveloperMode(serviceId) ? "enabled" : "disabled") +
+                    ".",
+                userId,
+                accessToken);
+          }
+        }
       }
 
       final String prevUri = (String) session.getAttribute(ATTR_SESSION_PREVIOUS_PAGE_URI);
