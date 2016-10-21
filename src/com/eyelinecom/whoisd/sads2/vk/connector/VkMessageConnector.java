@@ -162,7 +162,8 @@ public class VkMessageConnector extends HttpServlet {
         if (profile != null) {
           final boolean isDevModeEnabled = inProfile(profile).getDeveloperMode(req.getServiceId());
           if (isDevModeEnabled) {
-            profile.delete();
+            inProfile(profile).clear();
+            inProfile(profile).setDeveloperMode(getServiceId(req), true);
           }
         }
       }
@@ -240,9 +241,8 @@ public class VkMessageConnector extends HttpServlet {
                   new String[] {
                       "Chat URL: " + VkServiceRegistry.getChatUrl(groupId) + ".",
                       "Group ID: " + groupId + ".",
-                      "Access token: " + accessToken + ".",
                       "Service: " + serviceId + ".",
-                      "Mobilizer instance: " + getRootUri()
+                      "MiniApps host: " + getRootUri()
                   },
                   "\n");
           client.send(msg, userId, accessToken);
