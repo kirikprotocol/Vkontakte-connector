@@ -212,7 +212,7 @@ public class VkMessageConnector extends HttpServlet {
     }
 
     @Override
-    protected Long getRequestTimestamp(VkCallbackRequest req) {
+    protected Long getEventOrder(VkCallbackRequest req) {
       final Integer callbackDate = req.getCallback().getObject().getDate();
       return callbackDate != null ? callbackDate.longValue() : null;
     }
