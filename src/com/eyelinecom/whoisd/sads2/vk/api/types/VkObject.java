@@ -31,6 +31,14 @@ public class VkObject {
     return userId;
   }
 
+  public Integer getDate() {
+    return date;
+  }
+
+  public void setDate(Integer date) {
+    this.date = date;
+  }
+
   public String getBody() {
     return body;
   }
