@@ -23,6 +23,7 @@ import org.apache.commons.httpclient.methods.multipart.FilePart;
 import org.apache.commons.httpclient.methods.multipart.Part;
 import org.apache.commons.httpclient.methods.multipart.StringPart;
 
+import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -99,7 +100,7 @@ public class VkApiImpl implements VkApi {
   @Override
   public void send(String message, int userId, String accessToken) {
     try {
-      apiRequest("https://api.vk.com/method/messages.send?message=" + message + "&user_id=" + userId +
+      apiRequest("https://api.vk.com/method/messages.send?message=" + encode(message) + "&user_id=" + userId +
               "&guid=" + guidGenerator.getAndIncrement() + "&access_token=" + accessToken + "&v=5.0");
       // TODO: check response?
     } catch (Exception e) {
@@ -107,10 +108,14 @@ public class VkApiImpl implements VkApi {
     }
   }
 
+  private String encode(String message) throws UnsupportedEncodingException {
+    return URLEncoder.encode(message, "UTF-8");
+  }
+
   @Override
   public void send(String message, int userId, String accessToken, String latitude, String longitude) {
     try {
-      apiRequest("https://api.vk.com/method/messages.send?message=" + message + "&user_id=" + userId +
+      apiRequest("https://api.vk.com/method/messages.send?message=" + encode(message) + "&user_id=" + userId +
               "&lat=" + latitude + "&long=" + longitude +
               "&guid=" + guidGenerator.getAndIncrement() + "&access_token=" + accessToken + "&v=5.0");
       // TODO: check response?
